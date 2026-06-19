@@ -1,0 +1,1222 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GeoQuest - カスタム地理当てゲーム＆復習ツール</title>
+    <!-- Tailwind CSS for elegant styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome for beautiful icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            height: 100vh;
+        }
+        #pano {
+            height: 100%;
+            width: 100%;
+            background-color: #111827;
+        }
+        #map-container {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 40;
+        }
+        #map-container:hover {
+            width: 420px;
+            height: 360px;
+            opacity: 1;
+        }
+        /* Scrollbar styling for history lists */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1f2937;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #4f46e5;
+            border-radius: 3px;
+        }
+        @media (max-width: 768px) {
+            #map-container {
+                width: 260px;
+                height: 220px;
+            }
+            #map-container:hover {
+                width: 320px;
+                height: 280px;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-950 text-white flex flex-col">
+
+    <!-- Header Navigation Bar -->
+    <header class="bg-gray-900 border-b border-gray-800 p-4 flex items-center justify-between z-50">
+        <div class="flex items-center space-x-3">
+            <div class="bg-indigo-600 p-2 rounded-xl text-white shadow-lg shadow-indigo-600/30">
+                <i class="fa-solid fa-earth-asia text-xl"></i>
+            </div>
+            <div>
+                <h1 class="text-xl font-extrabold tracking-wider text-indigo-400">GeoQuest Pro</h1>
+                <p class="text-[10px] text-gray-400 font-medium tracking-wide" id="sub-mode-title">エリア: 世界全体 | ラウンド: 5回</p>
+            </div>
+        </div>
+        
+        <!-- Score / Round / Control Display -->
+        <div class="flex items-center space-x-4">
+            <div class="text-center bg-gray-950 px-3.5 py-1 rounded-lg border border-gray-800">
+                <p class="text-[9px] text-gray-500 uppercase tracking-widest font-bold">ラウンド</p>
+                <p class="text-base font-black text-yellow-400"><span id="current-round">1</span><span id="max-round-display">/5</span></p>
+            </div>
+            <div class="text-center bg-gray-950 px-3.5 py-1 rounded-lg border border-gray-800">
+                <p class="text-[9px] text-gray-500 uppercase tracking-widest font-bold">獲得スコア</p>
+                <p class="text-base font-black text-green-400" id="total-score">0</p>
+            </div>
+            <!-- Endless mode finish early button -->
+            <button id="endless-finish-btn" class="hidden bg-red-600 hover:bg-red-500 text-white font-bold text-xs px-3 py-2 rounded-xl transition duration-200">
+                ゲームを終了
+            </button>
+            <button id="lobby-return-btn" class="text-gray-400 hover:text-white transition duration-200" title="設定画面に戻る">
+                <i class="fa-solid fa-house text-lg"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Game Area -->
+    <main class="flex-1 relative flex flex-col overflow-hidden">
+        
+        <!-- Google Street View Container -->
+        <div class="flex-1 h-full relative">
+            <div id="pano"></div>
+            
+            <!-- Loading Indicator Overlay -->
+            <div id="loading-overlay" class="absolute inset-0 bg-gray-950 bg-opacity-90 flex flex-col items-center justify-center z-30 transition-all duration-300">
+                <div class="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-indigo-500 mb-4"></div>
+                <h3 class="text-xl font-bold mb-2 tracking-wide">ストリートビューをロード中...</h3>
+                <p class="text-xs text-gray-400 max-w-xs text-center" id="loading-status">美しい場所を探しています</p>
+            </div>
+
+            <!-- Compass Overlay -->
+            <div class="absolute top-4 left-4 bg-gray-900 bg-opacity-80 p-3 rounded-2xl border border-gray-800 shadow-lg z-20 flex flex-col items-center pointer-events-none">
+                <i class="fa-solid fa-compass text-2xl text-red-500 transition-transform duration-700" id="compass-icon"></i>
+                <span class="text-[9px] text-gray-400 mt-1 font-black">N</span>
+            </div>
+
+            <!-- Studying / Reviewing Mode Status Bar -->
+            <div id="review-banner" class="absolute top-4 left-24 right-24 bg-indigo-600/90 backdrop-blur-sm px-6 py-2.5 rounded-2xl border border-indigo-500 shadow-xl z-20 hidden flex justify-between items-center">
+                <div class="flex items-center space-x-2">
+                    <i class="fa-solid fa-graduation-cap text-lg text-yellow-300 animate-bounce"></i>
+                    <p class="text-xs font-bold text-white">復習ビューモード: <span id="review-banner-name" class="text-yellow-200 font-extrabold">エッフェル塔</span></p>
+                </div>
+                <button id="exit-review-view-btn" class="bg-gray-900 hover:bg-gray-800 text-white text-[10px] font-black px-3 py-1 rounded-lg transition duration-200">
+                    <i class="fa-solid fa-arrow-left mr-1"></i> リザルト一覧へ
+                </button>
+            </div>
+        </div>
+
+        <!-- Floating Map Container (For guessing on 2D Map) -->
+        <div id="map-container" class="absolute bottom-6 right-6 w-80 h-72 rounded-2xl overflow-hidden shadow-2xl border-2 border-indigo-500/40 bg-gray-900 flex flex-col">
+            <div class="bg-gray-800 px-3 py-2 flex justify-between items-center border-b border-gray-700 cursor-move" id="map-header">
+                <span class="text-xs font-bold text-indigo-300"><i class="fa-solid fa-map-location-dot mr-1.5"></i> 地図をクリックして予想！</span>
+                <span class="text-[9px] text-gray-400 bg-gray-950 px-2 py-0.5 rounded font-bold">Mini Map</span>
+            </div>
+            <div id="guess-map" class="flex-1 bg-gray-800"></div>
+            <div class="p-2 bg-gray-900 border-t border-gray-800 flex space-x-2">
+                <button id="reset-guess-btn" class="flex-1 bg-gray-800 hover:bg-gray-750 text-gray-300 text-xs py-2 rounded-xl border border-gray-750 font-semibold transition duration-200">
+                    位置リセット
+                </button>
+                <button id="guess-btn" disabled class="flex-1 bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-800 disabled:text-gray-600 disabled:cursor-not-allowed text-white text-xs font-bold py-2 rounded-xl transition duration-200 shadow-md shadow-indigo-600/10">
+                    ここに決定！
+                </button>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Lobby / Start Configuration Screen (Initially visible) -->
+    <div id="lobby-screen" class="fixed inset-0 bg-gray-950 z-[120] flex items-center justify-center overflow-y-auto p-4">
+        <div class="bg-gray-900 rounded-3xl max-w-2xl w-full p-6 md:p-8 border border-gray-800 shadow-2xl my-auto">
+            <div class="text-center mb-6">
+                <div class="inline-block bg-indigo-600/20 text-indigo-400 p-4 rounded-3xl mb-3 border border-indigo-500/20">
+                    <i class="fa-solid fa-earth-asia text-4xl animate-spin-slow"></i>
+                </div>
+                <h2 class="text-3xl font-black tracking-wider text-white">GeoQuest Pro</h2>
+                <p class="text-xs text-gray-400 mt-1">ストリートビューの景色から世界中の現在地を予測しよう！</p>
+            </div>
+
+            <!-- Set API Key Accordion-like bar -->
+            <div class="mb-6 bg-gray-950 p-4 rounded-2xl border border-gray-850">
+                <div class="flex justify-between items-center cursor-pointer" id="api-toggle-bar">
+                    <div class="flex items-center space-x-2">
+                        <i class="fa-solid fa-key text-yellow-400 text-sm"></i>
+                        <span class="text-xs font-bold text-gray-300">Google Maps API キー設定 (オプション)</span>
+                    </div>
+                    <span class="text-[10px] bg-gray-900 px-2 py-0.5 rounded text-indigo-400 font-bold" id="api-status-badge">デモモード動作中</span>
+                </div>
+                <div id="api-input-container" class="mt-3 hidden border-t border-gray-850 pt-3">
+                    <input type="text" id="api-key-input" placeholder="AIzaSy..." class="w-full bg-gray-900 border border-gray-800 rounded-xl px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs">
+                    <p class="text-[9px] text-gray-500 mt-1.5">※APIキーを入力すると、世界中の本物の位置にランダムワープする「リアル探索モード」で遊べます。空欄のままだと内蔵の「名所登録地モード」になります。</p>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Select Area -->
+                <div>
+                    <label class="block text-xs font-black text-indigo-400 uppercase tracking-widest mb-2"><i class="fa-solid fa-map mr-1"></i> エリア（マップ）選択</label>
+                    <div class="space-y-2" id="area-select-group">
+                        <button data-area="world" class="area-btn w-full text-left bg-indigo-600 text-white font-bold px-4 py-3 rounded-2xl border-2 border-indigo-500 flex justify-between items-center transition duration-150">
+                            <span>🌍 世界全体 (World)</span>
+                            <i class="fa-solid fa-circle-check text-sm text-yellow-400"></i>
+                        </button>
+                        <button data-area="japan" class="area-btn w-full text-left bg-gray-950 text-gray-400 hover:text-white hover:bg-gray-850 font-bold px-4 py-3 rounded-2xl border border-gray-850 flex justify-between items-center transition duration-150">
+                            <span>🇯🇵 日本国内限定 (Japan)</span>
+                            <i class="fa-solid fa-circle-check text-sm hidden text-yellow-400"></i>
+                        </button>
+                        <button data-area="europe" class="area-btn w-full text-left bg-gray-950 text-gray-400 hover:text-white hover:bg-gray-850 font-bold px-4 py-3 rounded-2xl border border-gray-850 flex justify-between items-center transition duration-150">
+                            <span>🇪🇺 ヨーロッパ (Europe)</span>
+                            <i class="fa-solid fa-circle-check text-sm hidden text-yellow-400"></i>
+                        </button>
+                        <button data-area="americas" class="area-btn w-full text-left bg-gray-950 text-gray-400 hover:text-white hover:bg-gray-850 font-bold px-4 py-3 rounded-2xl border border-gray-850 flex justify-between items-center transition duration-150">
+                            <span>🌎 アメリカ大陸 (Americas)</span>
+                            <i class="fa-solid fa-circle-check text-sm hidden text-yellow-400"></i>
+                        </button>
+                        <button data-area="asia" class="area-btn w-full text-left bg-gray-950 text-gray-400 hover:text-white hover:bg-gray-850 font-bold px-4 py-3 rounded-2xl border border-gray-850 flex justify-between items-center transition duration-150">
+                            <span>🌏 アジア他国 (Asia)</span>
+                            <i class="fa-solid fa-circle-check text-sm hidden text-yellow-400"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Select Rounds -->
+                <div>
+                    <label class="block text-xs font-black text-indigo-400 uppercase tracking-widest mb-2"><i class="fa-solid fa-list-ol mr-1"></i> ラウンド数設定</label>
+                    <div class="grid grid-cols-2 gap-2" id="round-select-group">
+                        <button data-round="3" class="round-btn bg-gray-950 text-gray-400 hover:text-white hover:bg-gray-850 py-3.5 rounded-2xl font-bold border border-gray-850 text-sm transition duration-150">3回戦</button>
+                        <button data-round="5" class="round-btn bg-indigo-600 text-white py-3.5 rounded-2xl font-bold border-2 border-indigo-500 text-sm transition duration-150">5回戦 (標準)</button>
+                        <button data-round="10" class="round-btn bg-gray-950 text-gray-400 hover:text-white hover:bg-gray-850 py-3.5 rounded-2xl font-bold border border-gray-850 text-sm transition duration-150">10回戦</button>
+                        <button data-round="endless" class="round-btn bg-gray-950 text-gray-400 hover:text-white hover:bg-gray-850 py-3.5 rounded-2xl font-bold border border-gray-850 text-sm flex flex-col items-center justify-center transition duration-150">
+                            <span class="text-xs">無限モード</span>
+                            <span class="text-[9px] text-gray-500 font-bold">♾️ エンドレス</span>
+                        </button>
+                    </div>
+
+                    <!-- Safety Reminder -->
+                    <div class="mt-6 bg-indigo-950/20 border border-indigo-900/40 p-4 rounded-2xl text-xs text-gray-400 leading-relaxed">
+                        <p class="font-bold text-indigo-300 mb-1"><i class="fa-solid fa-circle-info mr-1"></i> 地理学習ヒント</p>
+                        周りを見回して、植物の植生(熱帯/針葉樹)、道路の通行区分(左側/右側通行)、太陽の方向(北半球/南半球)、看板の言語に注目して推理しましょう！
+                    </div>
+                </div>
+            </div>
+
+            <!-- Start Button -->
+            <button id="start-game-btn" class="w-full mt-8 bg-indigo-600 hover:bg-indigo-500 text-white text-base font-black py-4 rounded-2xl transition duration-200 shadow-xl shadow-indigo-600/20 tracking-wider">
+                探索に出発する！ 🚀
+            </button>
+        </div>
+    </div>
+
+    <!-- Modal: Round Result Overlay -->
+    <div id="result-modal" class="fixed inset-0 bg-black/75 flex items-center justify-center z-[90] hidden p-4">
+        <div class="bg-gray-900 rounded-3xl max-w-lg w-full p-6 border border-gray-800 text-center">
+            <h3 class="text-2xl font-black text-indigo-400 mb-1" id="result-title">ラウンド結果</h3>
+            <p class="text-xs text-gray-500 mb-4" id="result-subtitle">素晴らしい推理です！</p>
+
+            <!-- Score Stats visual -->
+            <div class="grid grid-cols-2 gap-4 mb-4">
+                <div class="bg-gray-950 p-4 rounded-2xl border border-gray-850">
+                    <p class="text-[10px] text-gray-500 font-bold">距離の誤差</p>
+                    <p class="text-2xl font-black text-blue-400 mt-1" id="result-distance">0.0 km</p>
+                </div>
+                <div class="bg-gray-950 p-4 rounded-2xl border border-gray-850">
+                    <p class="text-[10px] text-gray-500 font-bold">獲得スコア</p>
+                    <p class="text-2xl font-black text-yellow-400 mt-1" id="result-points">0 / 5000</p>
+                </div>
+            </div>
+
+            <!-- Feedback Message -->
+            <p id="result-feedback" class="text-sm text-gray-300 mb-6 leading-relaxed px-4"></p>
+
+            <!-- Next Step Buttons -->
+            <div class="flex flex-col space-y-2">
+                <button id="next-round-btn" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black py-3.5 rounded-2xl transition duration-200 shadow-lg shadow-indigo-600/30">
+                    次のラウンドへ進む
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Final Game Over Summary -->
+    <div id="summary-modal" class="fixed inset-0 bg-black/85 flex items-center justify-center z-[100] hidden p-4 overflow-y-auto">
+        <div class="bg-gray-900 rounded-3xl max-w-md w-full p-6 md:p-8 border-2 border-indigo-500 text-center my-auto">
+            <div class="inline-block bg-yellow-500/10 text-yellow-500 p-4 rounded-full mb-3">
+                <i class="fa-solid fa-trophy text-3xl"></i>
+            </div>
+            <h3 class="text-2xl font-black text-white mb-1">ゲーム終了！</h3>
+            <p class="text-xs text-gray-400 mb-5" id="summary-round-info">5ラウンドの探索が完了しました</p>
+
+            <!-- Final Points Box -->
+            <div class="bg-gray-950 p-5 rounded-2xl border border-gray-800 mb-5">
+                <p class="text-[10px] text-gray-500 uppercase tracking-widest font-black">総合スコア</p>
+                <p class="text-4xl font-black text-green-400 mt-1" id="final-score-display">0</p>
+                <p class="text-xs text-indigo-400 mt-2 font-bold" id="final-rank">称号: 世界の散策者</p>
+            </div>
+
+            <!-- Stats detail -->
+            <div class="text-left text-xs text-gray-300 space-y-2.5 mb-6 bg-gray-950 p-4 rounded-2xl border border-gray-850">
+                <div class="flex justify-between">
+                    <span class="text-gray-500 font-semibold">1ラウンド平均スコア:</span>
+                    <span class="font-bold text-white" id="avg-score-display">0点</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-500 font-semibold">総誤差距離:</span>
+                    <span class="font-bold text-white" id="total-distance-display">0 km</span>
+                </div>
+            </div>
+
+            <!-- Action buttons (Primary focuses on Review) -->
+            <div class="flex flex-col space-y-2.5">
+                <button id="review-all-btn" class="w-full bg-green-600 hover:bg-green-500 text-white font-black py-3.5 rounded-2xl transition duration-200 shadow-lg shadow-green-600/20 flex items-center justify-center space-x-2">
+                    <i class="fa-solid fa-graduation-cap text-lg"></i>
+                    <span>各ラウンドを復習する 📖</span>
+                </button>
+                <button id="restart-game-btn" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-2xl transition duration-150 text-sm">
+                    新しくロビーから始める
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Interactive Learning & Review Screen (復習画面) -->
+    <div id="review-modal" class="fixed inset-0 bg-gray-950 z-[110] hidden flex flex-col md:flex-row p-4 md:p-6 gap-6">
+        <!-- Left Side: Round History List -->
+        <div class="w-full md:w-80 bg-gray-900 rounded-3xl border border-gray-800 p-5 flex flex-col h-2/5 md:h-full">
+            <div class="mb-4">
+                <h3 class="text-lg font-black text-white"><i class="fa-solid fa-clock-rotate-left text-indigo-400 mr-1.5"></i> 今回の履歴</h3>
+                <p class="text-[10px] text-gray-500 mt-0.5">ラウンドをクリックすると地図が切り替わります</p>
+            </div>
+
+            <!-- Scrollable list of played rounds -->
+            <div class="flex-1 overflow-y-auto space-y-2.5 pr-1" id="review-list">
+                <!-- Dynamically generated list items go here -->
+            </div>
+
+            <!-- Footer close review button -->
+            <button id="close-review-modal-btn" class="w-full mt-4 bg-gray-800 hover:bg-gray-750 text-white font-bold py-3 rounded-2xl transition duration-150 text-xs">
+                ゲームリザルトに戻る
+            </button>
+        </div>
+
+        <!-- Right Side: Review Visual Map & StreetView shortcut -->
+        <div class="flex-1 bg-gray-900 rounded-3xl border border-gray-800 p-5 flex flex-col h-3/5 md:h-full gap-4">
+            <div class="flex justify-between items-center flex-wrap gap-2">
+                <div>
+                    <h3 class="text-base font-black text-white"><i class="fa-solid fa-map-marked-alt text-green-400 mr-1.5"></i> 位置検証マップ</h3>
+                    <p class="text-xs text-indigo-300 font-semibold" id="review-location-title">ラウンドを選択してください</p>
+                </div>
+                <button id="view-review-pano-btn" disabled class="bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-850 disabled:text-gray-600 text-xs font-bold px-4 py-2 rounded-xl transition duration-150 flex items-center space-x-1.5">
+                    <i class="fa-solid fa-street-view text-sm"></i>
+                    <span>この場所のストリートビューを再確認する</span>
+                </button>
+            </div>
+
+            <!-- Review 2D Map Canvas -->
+            <div id="review-map" class="flex-1 rounded-2xl bg-gray-950 overflow-hidden min-h-[180px]"></div>
+
+            <div class="grid grid-cols-3 gap-3 text-center">
+                <div class="bg-gray-950 p-2.5 rounded-xl border border-gray-850">
+                    <span class="text-[9px] text-gray-500 font-bold block">獲得スコア</span>
+                    <span class="text-sm font-black text-yellow-400" id="review-card-score">-</span>
+                </div>
+                <div class="bg-gray-950 p-2.5 rounded-xl border border-gray-850">
+                    <span class="text-[9px] text-gray-500 font-bold block">誤差距離</span>
+                    <span class="text-sm font-black text-blue-400" id="review-card-distance">-</span>
+                </div>
+                <div class="bg-gray-950 p-2.5 rounded-xl border border-gray-850">
+                    <span class="text-[9px] text-gray-500 font-bold block">正解地点</span>
+                    <span class="text-xs font-bold text-green-400 truncate block px-1" id="review-card-coords" title="-">-</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- MAIN JAVASCRIPT LOGIC -->
+    <script>
+        // High Quality categorized Preset Locations
+        const PRESET_LOCATIONS = {
+            world: [
+                { name: "エッフェル塔 (フランス)", lat: 48.858222, lng: 2.2945, heading: 320, pitch: 10 },
+                { name: "ギザの大ピラミッド (エジプト)", lat: 29.975263, lng: 31.138883, heading: 220, pitch: 15 },
+                { name: "清水寺 (日本・京都)", lat: 34.994856, lng: 135.785046, heading: 250, pitch: 5 },
+                { name: "マチュピチュ (ペルー)", lat: -13.163174, lng: -72.545142, heading: 330, pitch: 10 },
+                { name: "コロッセオ (イタリア)", lat: 41.890214, lng: 12.492245, heading: 110, pitch: 15 },
+                { name: "自由の女神 (アメリカ)", lat: 40.689249, lng: -74.0445, heading: 0, pitch: 10 },
+                { name: "タージ・マハル (インド)", lat: 27.175015, lng: 78.042155, heading: 350, pitch: 15 },
+                { name: "グランドキャニオン (アメリカ)", lat: 36.057966, lng: -112.143099, heading: 30, pitch: 5 },
+                { name: "オペラハウス (オーストラリア)", lat: -33.856784, lng: 151.215297, heading: 180, pitch: 5 }
+            ],
+            japan: [
+                { name: "金閣寺 (京都)", lat: 35.03937, lng: 135.729243, heading: 305, pitch: 5 },
+                { name: "渋谷スクランブル交差点 (東京)", lat: 35.659483, lng: 139.700553, heading: 330, pitch: 10 },
+                { name: "厳島神社 大鳥居 (広島)", lat: 34.297127, lng: 132.318288, heading: 290, pitch: 5 },
+                { name: "姫路城 (兵庫)", lat: 34.837337, lng: 134.693425, heading: 350, pitch: 15 },
+                { name: "浅草 雷門 (東京)", lat: 35.711124, lng: 139.796336, heading: 350, pitch: 5 },
+                { name: "富士山 新倉山浅間公園 (山梨)", lat: 35.503673, lng: 138.802888, heading: 220, pitch: 10 },
+                { name: "道頓堀 グリコサイン前 (大阪)", lat: 34.669116, lng: 135.501345, heading: 260, pitch: 10 },
+                { name: "札幌市時計台 (北海道)", lat: 43.062635, lng: 141.353584, heading: 160, pitch: 10 },
+                { name: "首里城 守礼門 (沖縄)", lat: 26.218321, lng: 127.717616, heading: 90, pitch: 5 }
+            ],
+            europe: [
+                { name: "サグラダ・ファミリア (スペイン)", lat: 41.403612, lng: 2.174365, heading: 230, pitch: 20 },
+                { name: "サントリーニ島 (ギリシャ)", lat: 36.461426, lng: 25.375831, heading: 270, pitch: 5 },
+                { name: "ストーンヘンジ (イギリス)", lat: 51.178882, lng: -1.826189, heading: 110, pitch: 5 },
+                { name: "エッフェル塔 (フランス)", lat: 48.858222, lng: 2.2945, heading: 320, pitch: 10 },
+                { name: "コロッセオ (イタリア)", lat: 41.890214, lng: 12.492245, heading: 110, pitch: 15 },
+                { name: "ノイシュヴァンシュタイン城 (ドイツ)", lat: 47.557579, lng: 10.7498, heading: 260, pitch: 15 },
+                { name: "ベネチアの運河 (イタリア)", lat: 45.434166, lng: 12.338472, heading: 180, pitch: 5 }
+            ],
+            americas: [
+                { name: "タイムズスクエア (アメリカ・NY)", lat: 40.757988, lng: -73.985532, heading: 30, pitch: 15 },
+                { name: "コルコバードのキリスト像 (ブラジル)", lat: -22.951916, lng: -43.210487, heading: 40, pitch: 15 },
+                { name: "チチェン・イッツァのピラミッド (メキシコ)", lat: 20.682977, lng: -88.568579, heading: 140, pitch: 15 },
+                { name: "自由の女神 (アメリカ)", lat: 40.689249, lng: -74.0445, heading: 0, pitch: 10 },
+                { name: "マチュピチュ (ペルー)", lat: -13.163174, lng: -72.545142, heading: 330, pitch: 10 },
+                { name: "ゴールデンゲートブリッジ (アメリカ)", lat: 37.819929, lng: -122.478255, heading: 340, pitch: 10 },
+                { name: "イグアスの滝 (アルゼンチン)", lat: -25.695325, lng: -54.436735, heading: 290, pitch: 10 }
+            ],
+            asia: [
+                { name: "マリーナベイ・サンズ (シンガポール)", lat: 1.282834, lng: 103.858528, heading: 120, pitch: 10 },
+                { name: "万里の長城 (中国)", lat: 40.359674, lng: 116.02011, heading: 150, pitch: 10 },
+                { name: "アンコール・ワット (カンボジア)", lat: 13.412467, lng: 103.866986, heading: 260, pitch: 10 },
+                { name: "タージ・マハル (インド)", lat: 27.175015, lng: 78.042155, heading: 350, pitch: 15 },
+                { name: "九份 老街 (台湾)", lat: 25.109885, lng: 121.84518, heading: 340, pitch: 5 },
+                { name: "ブルジュ・ハリファ前 (ドバイ)", lat: 25.197249, lng: 55.274311, heading: 220, pitch: 20 }
+            ]
+        };
+
+        // Bounding boxes for random real Street View (approximate areas if they use API with regions)
+        const REGION_BOUNDS = {
+            world: null,
+            japan: { latMin: 31, latMax: 44, lngMin: 129, lngMax: 145 },
+            europe: { latMin: 37, latMax: 65, lngMin: -9, lngMax: 30 },
+            americas: { latMin: -35, latMax: 55, lngMin: -115, lngMax: -40 },
+            asia: { latMin: -5, latMax: 45, lngMin: 70, lngMax: 140 }
+        };
+
+        // Game Configuration & State
+        const state = {
+            apiKey: localStorage.getItem('geoguessr_api_key') || '',
+            selectedArea: 'world',
+            roundsCount: 5,        // can be 'endless' or a number
+            isEndless: false,
+            currentRound: 1,
+            totalScore: 0,
+            totalDistance: 0,
+            
+            // Map References
+            panorama: null,
+            guessMap: null,
+            guessMarker: null,
+            answerMarker: null,
+            resultLine: null,
+
+            // Review Mode Variables
+            reviewMap: null,
+            reviewMarkers: { guess: null, answer: null, line: null },
+            selectedReviewIndex: null,
+            
+            // Tracking
+            targetLocation: null,
+            currentGuess: null,
+            isGuessed: false,
+            usedPresetIndexes: [],
+            
+            // History Storage for Reviewing (復習用履歴)
+            history: []
+        };
+
+        // UI references
+        const elements = {
+            currentRound: document.getElementById('current-round'),
+            maxRoundDisplay: document.getElementById('max-round-display'),
+            totalScore: document.getElementById('total-score'),
+            loadingOverlay: document.getElementById('loading-overlay'),
+            loadingStatus: document.getElementById('loading-status'),
+            guessBtn: document.getElementById('guess-btn'),
+            resetGuessBtn: document.getElementById('reset-guess-btn'),
+            compassIcon: document.getElementById('compass-icon'),
+            
+            // Modals & Lobby
+            lobbyScreen: document.getElementById('lobby-screen'),
+            apiToggleBar: document.getElementById('api-toggle-bar'),
+            apiInputContainer: document.getElementById('api-input-container'),
+            apiStatusBadge: document.getElementById('api-status-badge'),
+            apiKeyInput: document.getElementById('api-key-input'),
+            startGameBtn: document.getElementById('start-game-btn'),
+            subModeTitle: document.getElementById('sub-mode-title'),
+            endlessFinishBtn: document.getElementById('endless-finish-btn'),
+            lobbyReturnBtn: document.getElementById('lobby-return-btn'),
+
+            resultModal: document.getElementById('result-modal'),
+            resultDistance: document.getElementById('result-distance'),
+            resultPoints: document.getElementById('result-points'),
+            resultFeedback: document.getElementById('result-feedback'),
+            nextRoundBtn: document.getElementById('next-round-btn'),
+            
+            summaryModal: document.getElementById('summary-modal'),
+            summaryRoundInfo: document.getElementById('summary-round-info'),
+            finalScoreDisplay: document.getElementById('final-score-display'),
+            avgScoreDisplay: document.getElementById('avg-score-display'),
+            totalDistanceDisplay: document.getElementById('total-distance-display'),
+            finalRank: document.getElementById('final-rank'),
+            restartGameBtn: document.getElementById('restart-game-btn'),
+            reviewAllBtn: document.getElementById('review-all-btn'),
+            
+            // Review Specific elements
+            reviewModal: document.getElementById('review-modal'),
+            reviewList: document.getElementById('review-list'),
+            closeReviewModalBtn: document.getElementById('close-review-modal-btn'),
+            reviewLocationTitle: document.getElementById('review-location-title'),
+            viewReviewPanoBtn: document.getElementById('view-review-pano-btn'),
+            reviewCardScore: document.getElementById('review-card-score'),
+            reviewCardDistance: document.getElementById('review-card-distance'),
+            reviewCardCoords: document.getElementById('review-card-coords'),
+            reviewBanner: document.getElementById('review-banner'),
+            reviewBannerName: document.getElementById('review-banner-name'),
+            exitReviewViewBtn: document.getElementById('exit-review-view-btn')
+        };
+
+        // Map setup panel tracking
+        state.mapContainer = document.getElementById('map-container');
+
+        // Haversine formula
+        function getDistanceInKm(lat1, lon1, lat2, lon2) {
+            const R = 6371; 
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = 
+                Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            return R * c;
+        }
+
+        function calculateScore(distanceKm) {
+            if (distanceKm < 0.025) return 5000;
+            // Decay curve
+            const score = Math.round(5000 * Math.exp(-distanceKm / 800));
+            return Math.max(0, Math.min(5000, score));
+        }
+
+        function getFeedbackMessage(score) {
+            if (score >= 4900) return "完璧です！並外れた観察眼をお持ちですね！🎯🔍";
+            if (score >= 4000) return "素晴らしい！周囲の様子から国や地域をしっかりと特定できています！🌍👍";
+            if (score >= 2500) return "良い推理です！植生や街並みから大体のヒントを掴めていますね。📈";
+            if (score >= 1000) return "おしい！大陸や半球はあっていたかもしれません。気候や看板の言語をよく見てみましょう。🌲";
+            return "遠く離れてしまいました！次は太陽の方向（北半球/南半球）や道路の案内標識をもっと探してみましょう！✊";
+        }
+
+        function getRankName(score) {
+            const average = state.history.length > 0 ? score / state.history.length : 0;
+            if (average >= 4500) return "称号: 🗺️ 地理を統べる者 (Geo-Master)";
+            if (average >= 3500) return "称号: 🛩️ ベテラン世界冒険家";
+            if (average >= 2000) return "称号: 🧭 一流の探索者";
+            if (average >= 1000) return "称号: 🎒 バックパッカー";
+            return "称号: 🚶 地理のヒヨコ散策家";
+        }
+
+        // Draggable Floating Mini Map panel
+        const makeDraggable = (header, container) => {
+            let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
+            header.onmousedown = dragMouseDown;
+
+            function dragMouseDown(e) {
+                e = e || window.event;
+                e.preventDefault();
+                pos3 = e.clientX;
+                pos4 = e.clientY;
+                document.onmouseup = closeDragElement;
+                document.onmousemove = elementDrag;
+            }
+
+            function elementDrag(e) {
+                e = e || window.event;
+                e.preventDefault();
+                pos1 = pos3 - e.clientX;
+                pos2 = pos4 - e.clientY;
+                pos3 = e.clientX;
+                pos4 = e.clientY;
+                
+                let newTop = container.offsetTop - pos2;
+                let newLeft = container.offsetLeft - pos1;
+
+                const buffer = 10;
+                newTop = Math.max(buffer, Math.min(window.innerHeight - container.offsetHeight - buffer, newTop));
+                newLeft = Math.max(buffer, Math.min(window.innerWidth - container.offsetWidth - buffer, newLeft));
+
+                container.style.top = newTop + "px";
+                container.style.left = newLeft + "px";
+                container.style.bottom = "auto";
+                container.style.right = "auto";
+            }
+
+            function closeDragElement() {
+                document.onmouseup = null;
+                document.onmousemove = null;
+            }
+        };
+
+        // Load Maps API Script
+        function loadGoogleMapsScript() {
+            const existingScript = document.getElementById('google-maps-script');
+            if (existingScript) existingScript.remove();
+
+            const script = document.createElement('script');
+            script.id = 'google-maps-script';
+            const keyQuery = state.apiKey ? `&key=${state.apiKey}` : '';
+            script.src = `https://maps.googleapis.com/maps/api/js?v=weekly${keyQuery}&callback=initApp&loading=async`;
+            script.defer = true;
+            
+            script.onerror = () => {
+                showSimpleError("Google Mapsのロードに失敗しました。APIキーまたはネットワークを確認してください。");
+            };
+
+            document.head.appendChild(script);
+        }
+
+        window.initApp = function() {
+            setupMaps();
+        };
+
+        // Initialize maps components (Run once)
+        function setupMaps() {
+            // Main Panorama Viewport
+            state.panorama = new google.maps.StreetViewPanorama(
+                document.getElementById('pano'),
+                {
+                    addressControl: false,
+                    linksControl: true,
+                    panControl: true,
+                    enableCloseButton: false,
+                    showRoadLabels: false,
+                    zoomControl: true,
+                    motionTracking: false,
+                    motionTrackingControl: false
+                }
+            );
+
+            state.panorama.addListener('pov_changed', () => {
+                const pov = state.panorama.getPov();
+                if (pov && typeof pov.heading === 'number') {
+                    elements.compassIcon.style.transform = `rotate(${-pov.heading}deg)`;
+                }
+            });
+
+            // Interactive guessing Map
+            state.guessMap = new google.maps.Map(document.getElementById('guess-map'), {
+                center: { lat: 20, lng: 0 },
+                zoom: 1,
+                mapTypeControl: false,
+                streetViewControl: false,
+                fullscreenControl: false,
+                styles: getMapDarkModeStyles()
+            });
+
+            state.guessMap.addListener('click', (mapsMouseEvent) => {
+                if (state.isGuessed) return;
+
+                const clickedLatLng = mapsMouseEvent.latLng;
+                state.currentGuess = {
+                    lat: clickedLatLng.lat(),
+                    lng: clickedLatLng.lng()
+                };
+
+                if (state.guessMarker) {
+                    state.guessMarker.setPosition(clickedLatLng);
+                } else {
+                    state.guessMarker = new google.maps.Marker({
+                        position: clickedLatLng,
+                        map: state.guessMap,
+                        icon: { url: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png' }
+                    });
+                }
+                elements.guessBtn.removeAttribute('disabled');
+            });
+
+            // Setup a separate Map for Review Screen inside the modal
+            state.reviewMap = new google.maps.Map(document.getElementById('review-map'), {
+                center: { lat: 20, lng: 0 },
+                zoom: 1,
+                mapTypeControl: false,
+                streetViewControl: false,
+                fullscreenControl: false,
+                styles: getMapDarkModeStyles()
+            });
+        }
+
+        // Return Dark Mode Map Theme
+        function getMapDarkModeStyles() {
+            return [
+                { "featureType": "all", "elementType": "labels.text.fill", "stylers": [{"color": "#8a8a8a"}] },
+                { "featureType": "all", "elementType": "labels.text.stroke", "stylers": [{"visibility": "off"}] },
+                { "featureType": "administrative", "elementType": "geometry.fill", "stylers": [{"color": "#000000"}] },
+                { "featureType": "landscape", "elementType": "geometry.fill", "stylers": [{"color": "#212529"}] },
+                { "featureType": "water", "elementType": "geometry.fill", "stylers": [{"color": "#0f172a"}] }
+            ];
+        }
+
+        // Start playing round
+        async function startNewRound() {
+            elements.currentRound.textContent = state.currentRound;
+            elements.totalScore.textContent = state.totalScore;
+            
+            showLoading(true);
+            elements.guessBtn.setAttribute('disabled', 'true');
+            elements.resultModal.classList.add('hidden');
+            state.isGuessed = false;
+            state.currentGuess = null;
+
+            // Clear previous UI overlays
+            if (state.guessMarker) { state.guessMarker.setMap(null); state.guessMarker = null; }
+            if (state.answerMarker) { state.answerMarker.setMap(null); state.answerMarker = null; }
+            if (state.resultLine) { state.resultLine.setMap(null); state.resultLine = null; }
+
+            if (state.guessMap) {
+                state.guessMap.setCenter({ lat: 20, lng: 0 });
+                state.guessMap.setZoom(1);
+            }
+
+            // Load location metadata
+            if (state.apiKey) {
+                elements.loadingStatus.textContent = "リアルタイム探索中... エリア条件に適合したポイントを検索しています。";
+                await findRandomStreetViewWithAPI();
+            } else {
+                elements.loadingStatus.textContent = "世界の素晴らしい登録スポットから選択中...";
+                selectPresetLocation();
+            }
+
+            // Set street view panorama camera
+            if (state.targetLocation) {
+                state.panorama.setPosition({ 
+                    lat: state.targetLocation.lat, 
+                    lng: state.targetLocation.lng 
+                });
+                
+                state.panorama.setPov({
+                    heading: state.targetLocation.heading || 0,
+                    pitch: state.targetLocation.pitch || 0
+                });
+
+                setTimeout(() => { showLoading(false); }, 1000);
+            }
+        }
+
+        // Get Presets location for selected Area
+        function selectPresetLocation() {
+            const areaKey = state.selectedArea;
+            const locations = PRESET_LOCATIONS[areaKey] || PRESET_LOCATIONS.world;
+            
+            if (state.usedPresetIndexes.length >= locations.length) {
+                state.usedPresetIndexes = []; // Reset history if all presets exhausted
+            }
+
+            let randomIndex;
+            do {
+                randomIndex = Math.floor(Math.random() * locations.length);
+            } while (state.usedPresetIndexes.includes(randomIndex));
+
+            state.usedPresetIndexes.push(randomIndex);
+            state.targetLocation = locations[randomIndex];
+        }
+
+        // Random StreetView Explorer filtered by Selected Region
+        async function findRandomStreetViewWithAPI() {
+            const svService = new google.maps.StreetViewService();
+            const bounds = REGION_BOUNDS[state.selectedArea];
+            const maxAttempts = 35;
+            let success = false;
+            let currentAttempt = 0;
+
+            while (!success && currentAttempt < maxAttempts) {
+                currentAttempt++;
+                elements.loadingStatus.textContent = `ストリートビュー認証中... (試行: ${currentAttempt}/${maxAttempts})`;
+                
+                let lat, lng;
+                if (bounds) {
+                    // Restrict coordinate generation to chosen continent bounds
+                    lat = (Math.random() * (bounds.latMax - bounds.latMin)) + bounds.latMin;
+                    lng = (Math.random() * (bounds.lngMax - bounds.lngMin)) + bounds.lngMin;
+                } else {
+                    // Global (Biased search centered mostly around major Street View dense territories)
+                    lat = (Math.random() * 110) - 50; 
+                    lng = (Math.random() * 360) - 180;
+                }
+
+                try {
+                    const result = await new Promise((resolve, reject) => {
+                        svService.getPanorama({
+                            location: { lat, lng },
+                            radius: 120000, 
+                            source: google.maps.StreetViewSource.OUTDOOR
+                        }, (data, status) => {
+                            if (status === google.maps.StreetViewStatus.OK) resolve(data);
+                            else reject(status);
+                        });
+                    });
+
+                    const loc = result.location.latLng;
+                    // Format elegant name based on Street View metadata description
+                    let locationName = result.location.description || "名もなき街道";
+                    if (result.location.shortDescription) {
+                        locationName += ` (${result.location.shortDescription})`;
+                    }
+
+                    state.targetLocation = {
+                        lat: loc.lat(),
+                        lng: loc.lng(),
+                        name: locationName
+                    };
+                    success = true;
+                } catch (err) {
+                    // Loop next coordinate lookup
+                }
+            }
+
+            // Fallback gracefully to presets if API query budget fails
+            if (!success) {
+                console.warn("API location finder couldn't locate a valid Street View. Loading high-quality Presets.");
+                selectPresetLocation();
+            }
+        }
+
+        // Submitting guess
+        function submitGuess() {
+            if (!state.currentGuess || state.isGuessed) return;
+            state.isGuessed = true;
+
+            const distance = getDistanceInKm(
+                state.targetLocation.lat,
+                state.targetLocation.lng,
+                state.currentGuess.lat,
+                state.currentGuess.lng
+            );
+            const score = calculateScore(distance);
+
+            // Save details to History Array for learning review at the end
+            state.history.push({
+                round: state.currentRound,
+                locationName: state.targetLocation.name,
+                target: { lat: state.targetLocation.lat, lng: state.targetLocation.lng },
+                guess: { lat: state.currentGuess.lat, lng: state.currentGuess.lng },
+                distance: distance,
+                score: score,
+                heading: state.targetLocation.heading || 0,
+                pitch: state.targetLocation.pitch || 0
+            });
+
+            state.totalScore += score;
+            state.totalDistance += distance;
+
+            // Draw answer markers on mini map
+            state.answerMarker = new google.maps.Marker({
+                position: { lat: state.targetLocation.lat, lng: state.targetLocation.lng },
+                map: state.guessMap,
+                title: "実際の正解場所",
+                icon: { url: 'https://maps.google.com/mapfiles/ms/icons/red-dot.png' }
+            });
+
+            state.resultLine = new google.maps.Polyline({
+                path: [
+                    { lat: state.currentGuess.lat, lng: state.currentGuess.lng },
+                    { lat: state.targetLocation.lat, lng: state.targetLocation.lng }
+                ],
+                geodesic: true,
+                strokeColor: '#ef4444',
+                strokeOpacity: 0.8,
+                strokeWeight: 3.5,
+                map: state.guessMap
+            });
+
+            // Adjust viewport bound so user can visualize guess vs actual location
+            const bounds = new google.maps.LatLngBounds();
+            bounds.extend(new google.maps.LatLng(state.currentGuess.lat, state.currentGuess.lng));
+            bounds.extend(new google.maps.LatLng(state.targetLocation.lat, state.targetLocation.lng));
+            state.guessMap.fitBounds(bounds);
+
+            // Populate round results modal
+            elements.resultDistance.textContent = distance >= 1 ? `${distance.toFixed(1)} km` : `${(distance * 1000).toFixed(0)} m`;
+            elements.resultPoints.textContent = `${score} / 5000`;
+            elements.resultFeedback.innerHTML = `正解は <b>"${state.targetLocation.name}"</b> でした。<br>${getFeedbackMessage(score)}`;
+            
+            // Handle Next Round trigger texts
+            if (state.isEndless) {
+                elements.nextRoundBtn.textContent = "次のスポットへ";
+            } else if (state.currentRound === state.roundsCount) {
+                elements.nextRoundBtn.textContent = "最終リザルトを見る";
+            } else {
+                elements.nextRoundBtn.textContent = "次のラウンドへ進む";
+            }
+
+            elements.resultModal.classList.remove('hidden');
+        }
+
+        // Proceeds game step
+        function handleNextStep() {
+            if (state.isEndless) {
+                state.currentRound++;
+                startNewRound();
+            } else if (state.currentRound < state.roundsCount) {
+                state.currentRound++;
+                startNewRound();
+            } else {
+                // Game Finished
+                showFinalResults();
+            }
+        }
+
+        // Show Game Finished Panel
+        function showFinalResults() {
+            elements.resultModal.classList.add('hidden');
+            
+            elements.finalScoreDisplay.textContent = state.totalScore;
+            elements.avgScoreDisplay.textContent = `${Math.round(state.totalScore / state.history.length)} 点`;
+            elements.totalDistanceDisplay.textContent = `${state.totalDistance.toFixed(1)} km`;
+            elements.finalRank.textContent = getRankName(state.totalScore);
+
+            if (state.isEndless) {
+                elements.summaryRoundInfo.textContent = `エンドレスモードで計 ${state.history.length} スポットを探索しました！`;
+            } else {
+                elements.summaryRoundInfo.textContent = `${state.roundsCount} ラウンドの探索をクリアしました！`;
+            }
+            
+            elements.summaryModal.classList.remove('hidden');
+        }
+
+        // Setup Interactive Learning Review panel
+        function openReviewInterface() {
+            elements.summaryModal.classList.add('hidden');
+            elements.reviewModal.classList.remove('hidden');
+
+            // Reset Right panel card values
+            elements.reviewLocationTitle.textContent = "リストから復習したいラウンドを選択してください";
+            elements.reviewCardScore.textContent = "-";
+            elements.reviewCardDistance.textContent = "-";
+            elements.reviewCardCoords.textContent = "-";
+            elements.viewReviewPanoBtn.setAttribute('disabled', 'true');
+
+            // Empty previous review markers
+            clearReviewMarkers();
+
+            // Populate Left Sidebar round logs list
+            elements.reviewList.innerHTML = '';
+            state.history.forEach((hist, index) => {
+                const item = document.createElement('div');
+                item.className = 'bg-gray-950 hover:bg-gray-850 p-3 rounded-xl border border-gray-850 cursor-pointer transition flex justify-between items-center';
+                item.setAttribute('data-index', index);
+                
+                // Color grades based on accuracy score
+                let badgeColor = 'text-red-400 bg-red-950/20';
+                if (hist.score >= 4000) badgeColor = 'text-green-400 bg-green-950/20 border border-green-900/40';
+                else if (hist.score >= 2000) badgeColor = 'text-yellow-400 bg-yellow-950/20 border border-yellow-900/40';
+
+                item.innerHTML = `
+                    <div class="truncate pr-2 text-left">
+                        <span class="text-[10px] text-indigo-400 font-bold block">R${hist.round}: ${hist.locationName}</span>
+                        <span class="text-[10px] text-gray-400 font-semibold">誤差: ${hist.distance >= 1 ? hist.distance.toFixed(1) + ' km' : (hist.distance * 1000).toFixed(0) + ' m'}</span>
+                    </div>
+                    <span class="text-xs font-black px-2 py-1 rounded-lg ${badgeColor}">${hist.score}点</span>
+                `;
+
+                item.addEventListener('click', () => selectReviewItem(index, item));
+                elements.reviewList.appendChild(item);
+            });
+        }
+
+        function clearReviewMarkers() {
+            if (state.reviewMarkers.guess) { state.reviewMarkers.guess.setMap(null); state.reviewMarkers.guess = null; }
+            if (state.reviewMarkers.answer) { state.reviewMarkers.answer.setMap(null); state.reviewMarkers.answer = null; }
+            if (state.reviewMarkers.line) { state.reviewMarkers.line.setMap(null); state.reviewMarkers.line = null; }
+        }
+
+        // Clicked/selected a round to study
+        function selectReviewItem(index, elementNode) {
+            state.selectedReviewIndex = index;
+            const data = state.history[index];
+
+            // Highlight chosen item in list
+            document.querySelectorAll('#review-list > div').forEach(node => {
+                node.classList.remove('border-indigo-500', 'bg-indigo-950/10');
+                node.classList.add('border-gray-850', 'bg-gray-950');
+            });
+            elementNode.classList.remove('border-gray-850', 'bg-gray-950');
+            elementNode.classList.add('border-indigo-500', 'bg-indigo-950/10');
+
+            // Populate Stats Cards details
+            elements.reviewLocationTitle.textContent = `${data.round}ラウンド：${data.locationName}`;
+            elements.reviewCardScore.textContent = `${data.score} / 5000`;
+            elements.reviewCardDistance.textContent = data.distance >= 1 ? `${data.distance.toFixed(1)} km` : `${(data.distance * 1000).toFixed(0)} m`;
+            elements.reviewCardCoords.textContent = `${data.target.lat.toFixed(4)}, ${data.target.lng.toFixed(4)}`;
+            elements.reviewCardCoords.setAttribute('title', `緯度: ${data.target.lat}, 経度: ${data.target.lng}`);
+            elements.viewReviewPanoBtn.removeAttribute('disabled');
+
+            // Redraw Markers and Polyline on Review Map
+            clearReviewMarkers();
+
+            state.reviewMarkers.guess = new google.maps.Marker({
+                position: data.guess,
+                map: state.reviewMap,
+                icon: { url: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png' },
+                title: "あなたの推測地点"
+            });
+
+            state.reviewMarkers.answer = new google.maps.Marker({
+                position: data.target,
+                map: state.reviewMap,
+                icon: { url: 'https://maps.google.com/mapfiles/ms/icons/red-dot.png' },
+                title: "実際の正解場所"
+            });
+
+            state.reviewMarkers.line = new google.maps.Polyline({
+                path: [data.guess, data.target],
+                geodesic: true,
+                strokeColor: '#f59e0b',
+                strokeOpacity: 0.9,
+                strokeWeight: 4,
+                map: state.reviewMap
+            });
+
+            // Re-fit maps bounding box
+            const bounds = new google.maps.LatLngBounds();
+            bounds.extend(new google.maps.LatLng(data.guess.lat, data.guess.lng));
+            bounds.extend(new google.maps.LatLng(data.target.lat, data.target.lng));
+            state.reviewMap.fitBounds(bounds);
+        }
+
+        // Close Review Modal & return back to summary
+        function closeReviewInterface() {
+            elements.reviewModal.classList.add('hidden');
+            elements.summaryModal.classList.remove('hidden');
+        }
+
+        // Educational landscape teleport (Go back to the panorama during review to examine surroundings)
+        function teleportToReviewPanorama() {
+            if (state.selectedReviewIndex === null) return;
+            const data = state.history[state.selectedReviewIndex];
+
+            elements.reviewBannerName.textContent = data.locationName;
+            elements.reviewModal.classList.add('hidden');
+            
+            // Minimise Guess Map panel while looking around
+            state.mapContainer.style.opacity = '0.15';
+            state.mapContainer.style.pointerEvents = 'none';
+
+            // Point Street View to the target
+            state.panorama.setPosition(data.target);
+            state.panorama.setPov({
+                heading: data.heading,
+                pitch: data.pitch
+            });
+
+            elements.reviewBanner.classList.remove('hidden');
+        }
+
+        // Return from Street View visual back into Review cards
+        function exitPanoReviewMode() {
+            elements.reviewBanner.classList.add('hidden');
+            elements.reviewModal.classList.remove('hidden');
+
+            // Restore Map box interaction
+            state.mapContainer.style.opacity = '1';
+            state.mapContainer.style.pointerEvents = 'auto';
+
+            // Trigger Map refresh/resize so markers render correctly
+            setTimeout(() => {
+                google.maps.event.trigger(state.reviewMap, 'resize');
+                if (state.selectedReviewIndex !== null) {
+                    const data = state.history[state.selectedReviewIndex];
+                    const bounds = new google.maps.LatLngBounds();
+                    bounds.extend(new google.maps.LatLng(data.guess.lat, data.guess.lng));
+                    bounds.extend(new google.maps.LatLng(data.target.lat, data.target.lng));
+                    state.reviewMap.fitBounds(bounds);
+                }
+            }, 200);
+        }
+
+        // Launch Game Session from Settings Lobby
+        function startGameSession() {
+            // Check Lobby States
+            if (state.isEndless) {
+                elements.maxRoundDisplay.textContent = ' (無限)';
+                elements.endlessFinishBtn.classList.remove('hidden');
+            } else {
+                elements.maxRoundDisplay.textContent = `/${state.roundsCount}`;
+                elements.endlessFinishBtn.classList.add('hidden');
+            }
+
+            // Set Header text indicator
+            const areaNames = {
+                world: '世界全体 🌍',
+                japan: '日本国内 🇯🇵',
+                europe: 'ヨーロッパ 🇪🇺',
+                americas: 'アメリカ大陸 🌎',
+                asia: 'アジア他国 🌏'
+            };
+            const roundText = state.isEndless ? '無限モード ♾️' : `${state.roundsCount}回`;
+            elements.subModeTitle.textContent = `エリア: ${areaNames[state.selectedArea]} | ラウンド: ${roundText}`;
+
+            // Hide Lobby
+            elements.lobbyScreen.classList.add('hidden');
+            
+            // Clean up state stats
+            state.currentRound = 1;
+            state.totalScore = 0;
+            state.totalDistance = 0;
+            state.history = [];
+            state.usedPresetIndexes = [];
+
+            startNewRound();
+        }
+
+        // Return to lobby setting
+        function returnToLobby() {
+            elements.summaryModal.classList.add('hidden');
+            elements.resultModal.classList.add('hidden');
+            elements.lobbyScreen.classList.remove('hidden');
+        }
+
+        function showLoading(show) {
+            if (show) {
+                elements.loadingOverlay.style.opacity = '1';
+                elements.loadingOverlay.style.pointerEvents = 'auto';
+            } else {
+                elements.loadingOverlay.style.opacity = '0';
+                elements.loadingOverlay.style.pointerEvents = 'none';
+            }
+        }
+
+        function showSimpleError(msg) {
+            const toast = document.createElement('div');
+            toast.className = 'fixed bottom-4 left-4 bg-red-600 text-white font-bold py-3 px-5 rounded-2xl shadow-xl z-[150] text-xs flex items-center space-x-2';
+            toast.innerHTML = `<i class="fa-solid fa-circle-exclamation text-base"></i> <span>${msg}</span>`;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 5000);
+        }
+
+        // Event Listeners Binding
+        function setupEventListeners() {
+            // Submitting / Control Actions
+            elements.guessBtn.addEventListener('click', submitGuess);
+            elements.nextRoundBtn.addEventListener('click', handleNextStep);
+            
+            elements.resetGuessBtn.addEventListener('click', () => {
+                if (state.guessMarker && !state.isGuessed) {
+                    state.guessMarker.setMap(null);
+                    state.guessMarker = null;
+                    state.currentGuess = null;
+                    elements.guessBtn.setAttribute('disabled', 'true');
+                }
+            });
+
+            // Endless mode manual finish
+            elements.endlessFinishBtn.addEventListener('click', () => {
+                if (state.history.length === 0) {
+                    showSimpleError("最低1回は解答（推測）を行う必要があります。");
+                    return;
+                }
+                showFinalResults();
+            });
+
+            // Start settings lobby triggers
+            elements.startGameBtn.addEventListener('click', startGameSession);
+            elements.restartGameBtn.addEventListener('click', returnToLobby);
+            elements.lobbyReturnBtn.addEventListener('click', returnToLobby);
+
+            // Accordion toggle API Key panel
+            elements.apiToggleBar.addEventListener('click', () => {
+                elements.apiInputContainer.classList.toggle('hidden');
+            });
+
+            // API key input change saved
+            elements.apiKeyInput.addEventListener('change', () => {
+                const key = elements.apiKeyInput.value.trim();
+                state.apiKey = key;
+                localStorage.setItem('geoguessr_api_key', key);
+                updateAPIStatusBadge();
+                
+                // Reload Map script to apply new key
+                showLoading(true);
+                elements.loadingStatus.textContent = "API環境を再構成中...";
+                setTimeout(() => {
+                    loadGoogleMapsScript();
+                }, 400);
+            });
+
+            // Config: Selector Area Group Actions
+            const areaButtons = document.querySelectorAll('#area-select-group .area-btn');
+            areaButtons.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    areaButtons.forEach(b => {
+                        b.className = "area-btn w-full text-left bg-gray-950 text-gray-400 hover:text-white hover:bg-gray-850 font-bold px-4 py-3 rounded-2xl border border-gray-850 flex justify-between items-center transition duration-150";
+                        b.querySelector('i').classList.add('hidden');
+                    });
+                    btn.className = "area-btn w-full text-left bg-indigo-600 text-white font-bold px-4 py-3 rounded-2xl border-2 border-indigo-500 flex justify-between items-center transition duration-150";
+                    btn.querySelector('i').classList.remove('hidden');
+                    state.selectedArea = btn.getAttribute('data-area');
+                });
+            });
+
+            // Config: Selector Round Group Actions
+            const roundButtons = document.querySelectorAll('#round-select-group .round-btn');
+            roundButtons.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    roundButtons.forEach(b => {
+                        b.className = "round-btn bg-gray-950 text-gray-400 hover:text-white hover:bg-gray-850 py-3.5 rounded-2xl font-bold border border-gray-850 text-sm transition duration-150";
+                    });
+                    btn.className = "round-btn bg-indigo-600 text-white py-3.5 rounded-2xl font-bold border-2 border-indigo-500 text-sm transition duration-150";
+                    
+                    const val = btn.getAttribute('data-round');
+                    if (val === 'endless') {
+                        state.roundsCount = 99999; 
+                        state.isEndless = true;
+                    } else {
+                        state.roundsCount = parseInt(val, 10);
+                        state.isEndless = false;
+                    }
+                });
+            });
+
+            // Review / Learning Interface Controls
+            elements.reviewAllBtn.addEventListener('click', openReviewInterface);
+            elements.closeReviewModalBtn.addEventListener('click', closeReviewInterface);
+            elements.viewReviewPanoBtn.addEventListener('click', teleportToReviewPanorama);
+            elements.exitReviewViewBtn.addEventListener('click', exitPanoReviewMode);
+
+            // Draggable panels handler
+            makeDraggable(document.getElementById('map-header'), state.mapContainer);
+        }
+
+        // Sync API inputs UI with localstorage state
+        function updateAPIStatusBadge() {
+            if (state.apiKey) {
+                elements.apiStatusBadge.textContent = "リアル認証モード有効";
+                elements.apiStatusBadge.className = "text-[10px] bg-green-950/40 border border-green-900/60 px-2 py-0.5 rounded text-green-400 font-bold";
+                elements.apiKeyInput.value = state.apiKey;
+            } else {
+                elements.apiStatusBadge.textContent = "デモモード動作中";
+                elements.apiStatusBadge.className = "text-[10px] bg-gray-900 px-2 py-0.5 rounded text-indigo-400 font-bold";
+                elements.apiKeyInput.value = '';
+            }
+        }
+
+        // Global Page Bootstrap
+        window.onload = function() {
+            updateAPIStatusBadge();
+            setupEventListeners();
+            loadGoogleMapsScript();
+        };
+    </script>
+</body>
+</html>
