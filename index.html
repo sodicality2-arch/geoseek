@@ -67,6 +67,10 @@
         
         <!-- Score / Round / Control Display -->
         <div class="flex items-center space-x-4">
+            <!-- Mode badge indicator on header -->
+            <span id="header-api-badge" class="hidden md:inline-block text-[9px] bg-emerald-950/50 border border-emerald-850 px-2 py-1 rounded-lg text-emerald-400 font-black tracking-wider uppercase">
+                <i class="fa-solid fa-bolt mr-1"></i>API リアル探索
+            </span>
             <div class="text-center bg-gray-950 px-3.5 py-1 rounded-lg border border-gray-800">
                 <p class="text-[9px] text-gray-500 uppercase tracking-widest font-bold">ラウンド</p>
                 <p class="text-base font-black text-yellow-400"><span id="current-round">1</span><span id="max-round-display">/5</span></p>
@@ -147,18 +151,25 @@
                 <p class="text-xs text-gray-400 mt-1">ストリートビューの景色から世界中の現在地を予測しよう！</p>
             </div>
 
-            <!-- Set API Key Accordion-like bar -->
+            <!-- Set API Key Accordion-like bar (Crucial fixes applied here) -->
             <div class="mb-6 bg-gray-950 p-4 rounded-2xl border border-gray-850">
                 <div class="flex justify-between items-center cursor-pointer" id="api-toggle-bar">
                     <div class="flex items-center space-x-2">
                         <i class="fa-solid fa-key text-yellow-400 text-sm"></i>
-                        <span class="text-xs font-bold text-gray-300">Google Maps API キー設定 (オプション)</span>
+                        <span class="text-xs font-bold text-gray-300">Google Maps API キー設定</span>
                     </div>
-                    <span class="text-[10px] bg-gray-900 px-2 py-0.5 rounded text-indigo-400 font-bold" id="api-status-badge">デモモード動作中</span>
+                    <span class="text-[10px] px-2 py-0.5 rounded font-bold" id="api-status-badge">ロード中...</span>
                 </div>
-                <div id="api-input-container" class="mt-3 hidden border-t border-gray-850 pt-3">
-                    <input type="text" id="api-key-input" placeholder="AIzaSy..." class="w-full bg-gray-900 border border-gray-800 rounded-xl px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs">
-                    <p class="text-[9px] text-gray-500 mt-1.5">※APIキーを入力すると、世界中の本物の位置にランダムワープする「リアル探索モード」で遊べます。空欄のままだと内蔵の「名所登録地モード」になります。</p>
+                <div id="api-input-container" class="mt-3 border-t border-gray-850 pt-3 hidden">
+                    <div class="flex gap-2">
+                        <input type="text" id="api-key-input" placeholder="AIzaSy..." class="flex-1 bg-gray-900 border border-gray-800 rounded-xl px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs">
+                        <button id="apply-api-btn" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs px-4 py-2 rounded-xl transition duration-150">
+                            適用して更新
+                        </button>
+                    </div>
+                    <p class="text-[9px] text-gray-500 mt-1.5">
+                        ※ APIキーを適用すると<b>ページ全体が安全にリロード</b>され、新しいキーがGoogleの地図システムへ確実に認識されます。空欄にすると内蔵の高品質な「名所プリセットモード」に戻ります。
+                    </p>
                 </div>
             </div>
 
@@ -206,7 +217,7 @@
                     <!-- Safety Reminder -->
                     <div class="mt-6 bg-indigo-950/20 border border-indigo-900/40 p-4 rounded-2xl text-xs text-gray-400 leading-relaxed">
                         <p class="font-bold text-indigo-300 mb-1"><i class="fa-solid fa-circle-info mr-1"></i> 地理学習ヒント</p>
-                        周りを見回して、植物の植生(熱帯/針葉樹)、道路の通行区分(左側/右側通行)、太陽の方向(北半球/南半球)、看板の言語に注目して推理しましょう！
+                        周りを見回して、植物の状況、道路の通行区分（左側/右側通行）、太陽の角度、看板に書かれたアルファベットや文字体系に注目してみましょう！
                     </div>
                 </div>
             </div>
@@ -289,7 +300,7 @@
         </div>
     </div>
 
-    <!-- Modal: Interactive Learning & Review Screen (復習画面) -->
+    <!-- Modal: Interactive Learning & Review Screen -->
     <div id="review-modal" class="fixed inset-0 bg-gray-950 z-[110] hidden flex flex-col md:flex-row p-4 md:p-6 gap-6">
         <!-- Left Side: Round History List -->
         <div class="w-full md:w-80 bg-gray-900 rounded-3xl border border-gray-800 p-5 flex flex-col h-2/5 md:h-full">
@@ -397,7 +408,7 @@
             ]
         };
 
-        // Bounding boxes for random real Street View (approximate areas if they use API with regions)
+        // Bounding boxes for random real Street View
         const REGION_BOUNDS = {
             world: null,
             japan: { latMin: 31, latMax: 44, lngMin: 129, lngMax: 145 },
@@ -410,7 +421,7 @@
         const state = {
             apiKey: localStorage.getItem('geoguessr_api_key') || '',
             selectedArea: 'world',
-            roundsCount: 5,        // can be 'endless' or a number
+            roundsCount: 5,
             isEndless: false,
             currentRound: 1,
             totalScore: 0,
@@ -434,7 +445,7 @@
             isGuessed: false,
             usedPresetIndexes: [],
             
-            // History Storage for Reviewing (復習用履歴)
+            // History Storage for Reviewing
             history: []
         };
 
@@ -448,6 +459,7 @@
             guessBtn: document.getElementById('guess-btn'),
             resetGuessBtn: document.getElementById('reset-guess-btn'),
             compassIcon: document.getElementById('compass-icon'),
+            headerApiBadge: document.getElementById('header-api-badge'),
             
             // Modals & Lobby
             lobbyScreen: document.getElementById('lobby-screen'),
@@ -455,6 +467,7 @@
             apiInputContainer: document.getElementById('api-input-container'),
             apiStatusBadge: document.getElementById('api-status-badge'),
             apiKeyInput: document.getElementById('api-key-input'),
+            applyApiBtn: document.getElementById('apply-api-btn'),
             startGameBtn: document.getElementById('start-game-btn'),
             subModeTitle: document.getElementById('sub-mode-title'),
             endlessFinishBtn: document.getElementById('endless-finish-btn'),
@@ -489,9 +502,6 @@
             exitReviewViewBtn: document.getElementById('exit-review-view-btn')
         };
 
-        // Map setup panel tracking
-        state.mapContainer = document.getElementById('map-container');
-
         // Haversine formula
         function getDistanceInKm(lat1, lon1, lat2, lon2) {
             const R = 6371; 
@@ -506,7 +516,6 @@
 
         function calculateScore(distanceKm) {
             if (distanceKm < 0.025) return 5000;
-            // Decay curve
             const score = Math.round(5000 * Math.exp(-distanceKm / 800));
             return Math.max(0, Math.min(5000, score));
         }
@@ -569,7 +578,7 @@
             }
         };
 
-        // Load Maps API Script
+        // Load Maps API Script (Fully clean & reload wrapper)
         function loadGoogleMapsScript() {
             const existingScript = document.getElementById('google-maps-script');
             if (existingScript) existingScript.remove();
@@ -581,7 +590,7 @@
             script.defer = true;
             
             script.onerror = () => {
-                showSimpleError("Google Mapsのロードに失敗しました。APIキーまたはネットワークを確認してください。");
+                showSimpleError("Google Maps APIの通信に失敗しました。APIキーまたは接続状態をご確認ください。");
             };
 
             document.head.appendChild(script);
@@ -593,68 +602,77 @@
 
         // Initialize maps components (Run once)
         function setupMaps() {
-            // Main Panorama Viewport
-            state.panorama = new google.maps.StreetViewPanorama(
-                document.getElementById('pano'),
-                {
-                    addressControl: false,
-                    linksControl: true,
-                    panControl: true,
-                    enableCloseButton: false,
-                    showRoadLabels: false,
-                    zoomControl: true,
-                    motionTracking: false,
-                    motionTrackingControl: false
-                }
-            );
+            try {
+                // Main Panorama Viewport
+                state.panorama = new google.maps.StreetViewPanorama(
+                    document.getElementById('pano'),
+                    {
+                        addressControl: false,
+                        linksControl: true,
+                        panControl: true,
+                        enableCloseButton: false,
+                        showRoadLabels: false,
+                        zoomControl: true,
+                        motionTracking: false,
+                        motionTrackingControl: false
+                    }
+                );
 
-            state.panorama.addListener('pov_changed', () => {
-                const pov = state.panorama.getPov();
-                if (pov && typeof pov.heading === 'number') {
-                    elements.compassIcon.style.transform = `rotate(${-pov.heading}deg)`;
-                }
-            });
+                state.panorama.addListener('pov_changed', () => {
+                    const pov = state.panorama.getPov();
+                    if (pov && typeof pov.heading === 'number') {
+                        elements.compassIcon.style.transform = `rotate(${-pov.heading}deg)`;
+                    }
+                });
 
-            // Interactive guessing Map
-            state.guessMap = new google.maps.Map(document.getElementById('guess-map'), {
-                center: { lat: 20, lng: 0 },
-                zoom: 1,
-                mapTypeControl: false,
-                streetViewControl: false,
-                fullscreenControl: false,
-                styles: getMapDarkModeStyles()
-            });
+                // Interactive guessing Map
+                state.guessMap = new google.maps.Map(document.getElementById('guess-map'), {
+                    center: { lat: 20, lng: 0 },
+                    zoom: 1,
+                    mapTypeControl: false,
+                    streetViewControl: false,
+                    fullscreenControl: false,
+                    styles: getMapDarkModeStyles()
+                });
 
-            state.guessMap.addListener('click', (mapsMouseEvent) => {
-                if (state.isGuessed) return;
+                state.guessMap.addListener('click', (mapsMouseEvent) => {
+                    if (state.isGuessed) return;
 
-                const clickedLatLng = mapsMouseEvent.latLng;
-                state.currentGuess = {
-                    lat: clickedLatLng.lat(),
-                    lng: clickedLatLng.lng()
-                };
+                    const clickedLatLng = mapsMouseEvent.latLng;
+                    state.currentGuess = {
+                        lat: clickedLatLng.lat(),
+                        lng: clickedLatLng.lng()
+                    };
 
-                if (state.guessMarker) {
-                    state.guessMarker.setPosition(clickedLatLng);
-                } else {
-                    state.guessMarker = new google.maps.Marker({
-                        position: clickedLatLng,
-                        map: state.guessMap,
-                        icon: { url: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png' }
-                    });
-                }
-                elements.guessBtn.removeAttribute('disabled');
-            });
+                    if (state.guessMarker) {
+                        state.guessMarker.setPosition(clickedLatLng);
+                    } else {
+                        state.guessMarker = new google.maps.Marker({
+                            position: clickedLatLng,
+                            map: state.guessMap,
+                            icon: { url: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png' }
+                        });
+                    }
+                    elements.guessBtn.removeAttribute('disabled');
+                });
 
-            // Setup a separate Map for Review Screen inside the modal
-            state.reviewMap = new google.maps.Map(document.getElementById('review-map'), {
-                center: { lat: 20, lng: 0 },
-                zoom: 1,
-                mapTypeControl: false,
-                streetViewControl: false,
-                fullscreenControl: false,
-                styles: getMapDarkModeStyles()
-            });
+                // Setup a separate Map for Review Screen inside the modal
+                state.reviewMap = new google.maps.Map(document.getElementById('review-map'), {
+                    center: { lat: 20, lng: 0 },
+                    zoom: 1,
+                    mapTypeControl: false,
+                    streetViewControl: false,
+                    fullscreenControl: false,
+                    styles: getMapDarkModeStyles()
+                });
+
+                updateAPIStatusBadge();
+            } catch (e) {
+                console.error("Maps Initialization Error:", e);
+                showSimpleError("APIキーが無効、または制限に引っかかっています。内蔵プリセットモードで動作します。");
+                state.apiKey = '';
+                updateAPIStatusBadge();
+            }
         }
 
         // Return Dark Mode Map Theme
@@ -689,10 +707,14 @@
                 state.guessMap.setZoom(1);
             }
 
-            // Load location metadata
+            // Decide Location Generation Strategy
             if (state.apiKey) {
-                elements.loadingStatus.textContent = "リアルタイム探索中... エリア条件に適合したポイントを検索しています。";
-                await findRandomStreetViewWithAPI();
+                elements.loadingStatus.textContent = "リアルタイム探索中... エリアに適合したポイントをAPI検証しています。";
+                const apiSuccess = await findRandomStreetViewWithAPI();
+                if (!apiSuccess) {
+                    showSimpleError("APIでのStreetView取得に失敗したため、一時的に名所モードに切り替えます。");
+                    selectPresetLocation();
+                }
             } else {
                 elements.loadingStatus.textContent = "世界の素晴らしい登録スポットから選択中...";
                 selectPresetLocation();
@@ -720,7 +742,7 @@
             const locations = PRESET_LOCATIONS[areaKey] || PRESET_LOCATIONS.world;
             
             if (state.usedPresetIndexes.length >= locations.length) {
-                state.usedPresetIndexes = []; // Reset history if all presets exhausted
+                state.usedPresetIndexes = []; 
             }
 
             let randomIndex;
@@ -734,6 +756,10 @@
 
         // Random StreetView Explorer filtered by Selected Region
         async function findRandomStreetViewWithAPI() {
+            if (!window.google || !google.maps) {
+                return false;
+            }
+
             const svService = new google.maps.StreetViewService();
             const bounds = REGION_BOUNDS[state.selectedArea];
             const maxAttempts = 35;
@@ -742,15 +768,13 @@
 
             while (!success && currentAttempt < maxAttempts) {
                 currentAttempt++;
-                elements.loadingStatus.textContent = `ストリートビュー認証中... (試行: ${currentAttempt}/${maxAttempts})`;
+                elements.loadingStatus.textContent = `ストリートビュー位置取得中... (${currentAttempt}/${maxAttempts})`;
                 
                 let lat, lng;
                 if (bounds) {
-                    // Restrict coordinate generation to chosen continent bounds
                     lat = (Math.random() * (bounds.latMax - bounds.latMin)) + bounds.latMin;
                     lng = (Math.random() * (bounds.lngMax - bounds.lngMin)) + bounds.lngMin;
                 } else {
-                    // Global (Biased search centered mostly around major Street View dense territories)
                     lat = (Math.random() * 110) - 50; 
                     lng = (Math.random() * 360) - 180;
                 }
@@ -768,7 +792,6 @@
                     });
 
                     const loc = result.location.latLng;
-                    // Format elegant name based on Street View metadata description
                     let locationName = result.location.description || "名もなき街道";
                     if (result.location.shortDescription) {
                         locationName += ` (${result.location.shortDescription})`;
@@ -781,15 +804,15 @@
                     };
                     success = true;
                 } catch (err) {
-                    // Loop next coordinate lookup
+                    // API key failure status catches
+                    if (err === "REQUEST_DENIED") {
+                        showSimpleError("APIキーでの要求が拒否されました。APIキーが有効か、Street View APIが有効かご確認ください。");
+                        return false;
+                    }
+                    // Loop next coordinate
                 }
             }
-
-            // Fallback gracefully to presets if API query budget fails
-            if (!success) {
-                console.warn("API location finder couldn't locate a valid Street View. Loading high-quality Presets.");
-                selectPresetLocation();
-            }
+            return success;
         }
 
         // Submitting guess
@@ -805,7 +828,7 @@
             );
             const score = calculateScore(distance);
 
-            // Save details to History Array for learning review at the end
+            // Save details to History Array
             state.history.push({
                 round: state.currentRound,
                 locationName: state.targetLocation.name,
@@ -840,7 +863,6 @@
                 map: state.guessMap
             });
 
-            // Adjust viewport bound so user can visualize guess vs actual location
             const bounds = new google.maps.LatLngBounds();
             bounds.extend(new google.maps.LatLng(state.currentGuess.lat, state.currentGuess.lng));
             bounds.extend(new google.maps.LatLng(state.targetLocation.lat, state.targetLocation.lng));
@@ -851,7 +873,6 @@
             elements.resultPoints.textContent = `${score} / 5000`;
             elements.resultFeedback.innerHTML = `正解は <b>"${state.targetLocation.name}"</b> でした。<br>${getFeedbackMessage(score)}`;
             
-            // Handle Next Round trigger texts
             if (state.isEndless) {
                 elements.nextRoundBtn.textContent = "次のスポットへ";
             } else if (state.currentRound === state.roundsCount) {
@@ -872,7 +893,6 @@
                 state.currentRound++;
                 startNewRound();
             } else {
-                // Game Finished
                 showFinalResults();
             }
         }
@@ -900,24 +920,20 @@
             elements.summaryModal.classList.add('hidden');
             elements.reviewModal.classList.remove('hidden');
 
-            // Reset Right panel card values
             elements.reviewLocationTitle.textContent = "リストから復習したいラウンドを選択してください";
             elements.reviewCardScore.textContent = "-";
             elements.reviewCardDistance.textContent = "-";
             elements.reviewCardCoords.textContent = "-";
             elements.viewReviewPanoBtn.setAttribute('disabled', 'true');
 
-            // Empty previous review markers
             clearReviewMarkers();
 
-            // Populate Left Sidebar round logs list
             elements.reviewList.innerHTML = '';
             state.history.forEach((hist, index) => {
                 const item = document.createElement('div');
                 item.className = 'bg-gray-950 hover:bg-gray-850 p-3 rounded-xl border border-gray-850 cursor-pointer transition flex justify-between items-center';
                 item.setAttribute('data-index', index);
                 
-                // Color grades based on accuracy score
                 let badgeColor = 'text-red-400 bg-red-950/20';
                 if (hist.score >= 4000) badgeColor = 'text-green-400 bg-green-950/20 border border-green-900/40';
                 else if (hist.score >= 2000) badgeColor = 'text-yellow-400 bg-yellow-950/20 border border-yellow-900/40';
@@ -941,12 +957,10 @@
             if (state.reviewMarkers.line) { state.reviewMarkers.line.setMap(null); state.reviewMarkers.line = null; }
         }
 
-        // Clicked/selected a round to study
         function selectReviewItem(index, elementNode) {
             state.selectedReviewIndex = index;
             const data = state.history[index];
 
-            // Highlight chosen item in list
             document.querySelectorAll('#review-list > div').forEach(node => {
                 node.classList.remove('border-indigo-500', 'bg-indigo-950/10');
                 node.classList.add('border-gray-850', 'bg-gray-950');
@@ -954,7 +968,6 @@
             elementNode.classList.remove('border-gray-850', 'bg-gray-950');
             elementNode.classList.add('border-indigo-500', 'bg-indigo-950/10');
 
-            // Populate Stats Cards details
             elements.reviewLocationTitle.textContent = `${data.round}ラウンド：${data.locationName}`;
             elements.reviewCardScore.textContent = `${data.score} / 5000`;
             elements.reviewCardDistance.textContent = data.distance >= 1 ? `${data.distance.toFixed(1)} km` : `${(data.distance * 1000).toFixed(0)} m`;
@@ -962,7 +975,6 @@
             elements.reviewCardCoords.setAttribute('title', `緯度: ${data.target.lat}, 経度: ${data.target.lng}`);
             elements.viewReviewPanoBtn.removeAttribute('disabled');
 
-            // Redraw Markers and Polyline on Review Map
             clearReviewMarkers();
 
             state.reviewMarkers.guess = new google.maps.Marker({
@@ -988,20 +1000,17 @@
                 map: state.reviewMap
             });
 
-            // Re-fit maps bounding box
             const bounds = new google.maps.LatLngBounds();
             bounds.extend(new google.maps.LatLng(data.guess.lat, data.guess.lng));
             bounds.extend(new google.maps.LatLng(data.target.lat, data.target.lng));
             state.reviewMap.fitBounds(bounds);
         }
 
-        // Close Review Modal & return back to summary
         function closeReviewInterface() {
             elements.reviewModal.classList.add('hidden');
             elements.summaryModal.classList.remove('hidden');
         }
 
-        // Educational landscape teleport (Go back to the panorama during review to examine surroundings)
         function teleportToReviewPanorama() {
             if (state.selectedReviewIndex === null) return;
             const data = state.history[state.selectedReviewIndex];
@@ -1009,11 +1018,9 @@
             elements.reviewBannerName.textContent = data.locationName;
             elements.reviewModal.classList.add('hidden');
             
-            // Minimise Guess Map panel while looking around
             state.mapContainer.style.opacity = '0.15';
             state.mapContainer.style.pointerEvents = 'none';
 
-            // Point Street View to the target
             state.panorama.setPosition(data.target);
             state.panorama.setPov({
                 heading: data.heading,
@@ -1023,16 +1030,13 @@
             elements.reviewBanner.classList.remove('hidden');
         }
 
-        // Return from Street View visual back into Review cards
         function exitPanoReviewMode() {
             elements.reviewBanner.classList.add('hidden');
             elements.reviewModal.classList.remove('hidden');
 
-            // Restore Map box interaction
             state.mapContainer.style.opacity = '1';
             state.mapContainer.style.pointerEvents = 'auto';
 
-            // Trigger Map refresh/resize so markers render correctly
             setTimeout(() => {
                 google.maps.event.trigger(state.reviewMap, 'resize');
                 if (state.selectedReviewIndex !== null) {
@@ -1045,9 +1049,7 @@
             }, 200);
         }
 
-        // Launch Game Session from Settings Lobby
         function startGameSession() {
-            // Check Lobby States
             if (state.isEndless) {
                 elements.maxRoundDisplay.textContent = ' (無限)';
                 elements.endlessFinishBtn.classList.remove('hidden');
@@ -1056,7 +1058,6 @@
                 elements.endlessFinishBtn.classList.add('hidden');
             }
 
-            // Set Header text indicator
             const areaNames = {
                 world: '世界全体 🌍',
                 japan: '日本国内 🇯🇵',
@@ -1067,10 +1068,8 @@
             const roundText = state.isEndless ? '無限モード ♾️' : `${state.roundsCount}回`;
             elements.subModeTitle.textContent = `エリア: ${areaNames[state.selectedArea]} | ラウンド: ${roundText}`;
 
-            // Hide Lobby
             elements.lobbyScreen.classList.add('hidden');
             
-            // Clean up state stats
             state.currentRound = 1;
             state.totalScore = 0;
             state.totalDistance = 0;
@@ -1080,7 +1079,6 @@
             startNewRound();
         }
 
-        // Return to lobby setting
         function returnToLobby() {
             elements.summaryModal.classList.add('hidden');
             elements.resultModal.classList.add('hidden');
@@ -1099,15 +1097,29 @@
 
         function showSimpleError(msg) {
             const toast = document.createElement('div');
-            toast.className = 'fixed bottom-4 left-4 bg-red-600 text-white font-bold py-3 px-5 rounded-2xl shadow-xl z-[150] text-xs flex items-center space-x-2';
-            toast.innerHTML = `<i class="fa-solid fa-circle-exclamation text-base"></i> <span>${msg}</span>`;
+            toast.className = 'fixed bottom-4 left-4 bg-red-600 text-white font-bold py-3 px-5 rounded-2xl shadow-xl z-[150] text-xs flex items-center space-x-2 border border-red-500';
+            toast.innerHTML = `<i class="fa-solid fa-circle-exclamation text-base animate-pulse"></i> <span>${msg}</span>`;
             document.body.appendChild(toast);
-            setTimeout(() => toast.remove(), 5000);
+            setTimeout(() => toast.remove(), 6000);
+        }
+
+        // Synchronize API status badge & visibility states in settings
+        function updateAPIStatusBadge() {
+            if (state.apiKey) {
+                elements.apiStatusBadge.textContent = "リアル探索モード有効";
+                elements.apiStatusBadge.className = "text-[10px] bg-emerald-950/40 border border-emerald-900/60 px-2.5 py-0.5 rounded text-emerald-400 font-bold";
+                elements.apiKeyInput.value = state.apiKey;
+                elements.headerApiBadge.classList.remove('hidden');
+            } else {
+                elements.apiStatusBadge.textContent = "名所プリセット動作中";
+                elements.apiStatusBadge.className = "text-[10px] bg-indigo-950/40 border border-indigo-900/60 px-2.5 py-0.5 rounded text-indigo-400 font-bold";
+                elements.apiKeyInput.value = '';
+                elements.headerApiBadge.classList.add('hidden');
+            }
         }
 
         // Event Listeners Binding
         function setupEventListeners() {
-            // Submitting / Control Actions
             elements.guessBtn.addEventListener('click', submitGuess);
             elements.nextRoundBtn.addEventListener('click', handleNextStep);
             
@@ -1120,41 +1132,38 @@
                 }
             });
 
-            // Endless mode manual finish
             elements.endlessFinishBtn.addEventListener('click', () => {
                 if (state.history.length === 0) {
-                    showSimpleError("最低1回は解答（推測）を行う必要があります。");
+                    showSimpleError("最低1回は位置予測を行ってから終了してください。");
                     return;
                 }
                 showFinalResults();
             });
 
-            // Start settings lobby triggers
             elements.startGameBtn.addEventListener('click', startGameSession);
             elements.restartGameBtn.addEventListener('click', returnToLobby);
             elements.lobbyReturnBtn.addEventListener('click', returnToLobby);
 
-            // Accordion toggle API Key panel
             elements.apiToggleBar.addEventListener('click', () => {
                 elements.apiInputContainer.classList.toggle('hidden');
             });
 
-            // API key input change saved
-            elements.apiKeyInput.addEventListener('change', () => {
-                const key = elements.apiKeyInput.value.trim();
-                state.apiKey = key;
-                localStorage.setItem('geoguessr_api_key', key);
-                updateAPIStatusBadge();
+            // Action: Save API Key and trigger safe complete reload to re-register Key in maps.google
+            elements.applyApiBtn.addEventListener('click', () => {
+                const enteredKey = elements.apiKeyInput.value.trim();
+                localStorage.setItem('geoguessr_api_key', enteredKey);
+                state.apiKey = enteredKey;
                 
-                // Reload Map script to apply new key
                 showLoading(true);
-                elements.loadingStatus.textContent = "API環境を再構成中...";
+                elements.loadingStatus.textContent = "新しいAPI環境を適用中。安全に再起動しています...";
+                
+                // Triggers safe reload
                 setTimeout(() => {
-                    loadGoogleMapsScript();
-                }, 400);
+                    location.reload();
+                }, 800);
             });
 
-            // Config: Selector Area Group Actions
+            // Config selectors binding
             const areaButtons = document.querySelectorAll('#area-select-group .area-btn');
             areaButtons.forEach(btn => {
                 btn.addEventListener('click', () => {
@@ -1168,7 +1177,6 @@
                 });
             });
 
-            // Config: Selector Round Group Actions
             const roundButtons = document.querySelectorAll('#round-select-group .round-btn');
             roundButtons.forEach(btn => {
                 btn.addEventListener('click', () => {
@@ -1188,32 +1196,16 @@
                 });
             });
 
-            // Review / Learning Interface Controls
             elements.reviewAllBtn.addEventListener('click', openReviewInterface);
             elements.closeReviewModalBtn.addEventListener('click', closeReviewInterface);
             elements.viewReviewPanoBtn.addEventListener('click', teleportToReviewPanorama);
             elements.exitReviewViewBtn.addEventListener('click', exitPanoReviewMode);
 
-            // Draggable panels handler
             makeDraggable(document.getElementById('map-header'), state.mapContainer);
-        }
-
-        // Sync API inputs UI with localstorage state
-        function updateAPIStatusBadge() {
-            if (state.apiKey) {
-                elements.apiStatusBadge.textContent = "リアル認証モード有効";
-                elements.apiStatusBadge.className = "text-[10px] bg-green-950/40 border border-green-900/60 px-2 py-0.5 rounded text-green-400 font-bold";
-                elements.apiKeyInput.value = state.apiKey;
-            } else {
-                elements.apiStatusBadge.textContent = "デモモード動作中";
-                elements.apiStatusBadge.className = "text-[10px] bg-gray-900 px-2 py-0.5 rounded text-indigo-400 font-bold";
-                elements.apiKeyInput.value = '';
-            }
         }
 
         // Global Page Bootstrap
         window.onload = function() {
-            updateAPIStatusBadge();
             setupEventListeners();
             loadGoogleMapsScript();
         };
